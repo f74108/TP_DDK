@@ -1,0 +1,21 @@
+
+
+386_OBJECTS=\
+ $(OBJ_PATH)\$O\util.obj \
+ $(OBJ_PATH)\$O\hook.obj \
+ $(OBJ_PATH)\$O\ade32.obj \
+ $(OBJ_PATH)\$O\inline_hook_ntopenprocess.obj \
+ $(OBJ_PATH)\$O\obcallbacks.obj \
+ $(OBJ_PATH)\$O\main.obj \
+
+
+
+
+
+# lowercased
+BASEDIR=d:\project\ide\winddk\7600.16385.1
+OBJECT_ROOT=d:\project\ide\winddk\7600.16385.1
+MAKEDIR_LOWERCASE=d:\project\driver\tp_ddk
+OBJ_PATH=d:\project\driver\tp_ddk
+CONCURRENT_MIDL=0
+CONCURRENT_MANIFEST_BUILD=0

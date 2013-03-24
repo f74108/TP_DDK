@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TP_DDK", "sd_ddk.vcxproj", "{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Driver|Win32 = Driver|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Debug|Win32.Build.0 = Debug|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Driver|Win32.ActiveCfg = Driver|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Driver|Win32.Build.0 = Driver|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Release|Win32.ActiveCfg = Release|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
