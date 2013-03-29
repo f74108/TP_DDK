@@ -2,11 +2,21 @@
 
 #include "ntddk.h"
 #include <WINDEF.H>
+#include "ntimage.h"
 #include "ADE32.H"
 #include "ctl_code.h"
 
+#define GameProcessName "DNF.EXE"
+//系统build
+#define  BuildWin2000 2195
+#define  BuildWin2003 3790
+#define  BuildXp3 2600
+#define  BuildWin7 7600
+#define  LoadBase 0x400000
 
-
+//SSDT
+#define SSDT_INDEX_NtReadVirtualMemory 186
+#define SSDT_INDEX_NtWriteVirtualMemory 277
 
 #define TP_DeviceName L"\\Device\\TP_DDK"
 #define TP_symLinkName L"\\??\\TP_DDK"
@@ -25,12 +35,15 @@
 #define        IOCTL_START_PROTECTION        CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define        C_MAXPROCNUMS                        12
 
+#define CHECK_IRQL KdPrint(("DEBUG: ---->>>>> IRQL:%X <<<<---- \n",KeGetCurrentIrql ()));
+
 //////////////////////////////////////////////////////////////////////////
 
 
 /************************************************************************/
 /* TypeDef                                                                     */
 /************************************************************************/
+typedef ULONG   DWORD;
 
 typedef struct _SYSTEM_SERVICE_TABLE
 {
@@ -155,14 +168,33 @@ typedef struct _SYSTEM_MODULE {
 
 typedef struct _SYSTEM_MODULE_INFORMATION {
 	ULONG                ModulesCount;
-	SYSTEM_MODULE        Modules[0];
-
+	SYSTEM_MODULE        Modules[];
 } SYSTEM_MODULE_INFORMATION, *PSYSTEM_MODULE_INFORMATION;
-////////////////////////////////Global variable ///////////////////////////////////////////////
+
+
+typedef struct _LOADED_KERNEL_INFO
+{
+	PVOID OriginalKernelBase;
+	PVOID NewKernelBase;
+	PVOID NewPsdt;
+	PKEVENT NotifyEvent;
+	LONG LoadedStatus;
+} LOADED_KERNEL_INFO, *PLOADED_KERNEL_INFO;
+
+typedef
+	NTSTATUS 
+	(NTAPI*	_QuerySystemInformation)( 
+	IN SYSTEM_INFORMATION_CLASS SystemInformationClass, 
+	IN OUT PVOID SystemInformation, 
+	IN ULONG SystemInformationLength, 
+	OUT PULONG ReturnLength OPTIONAL 
+	); 
+
+//////////////////////////////Global variable ///////////////////////////////////////////////
 extern PSYSTEM_SERVICE_TABLE KeServiceDescriptorTable;
 extern PSYSTEM_DESCRIPTOR_TABLE KeServiceDescriptorTableShadow;
 
-// 定义NtOpenProcess的原型
+ //定义NtOpenProcess的原型
 typedef NTSTATUS (__stdcall *NTOPENPROCESS)(
 	OUT		PHANDLE ProcessHandle,
 	IN      ACCESS_MASK DesiredAccess,
@@ -201,11 +233,38 @@ EXTERN_C NTSYSAPI NTSTATUS NTAPI ZwQuerySystemInformation(
 //	OUT PRKAPC_STATE ApcState
 //	);
 
+NTSYSAPI 
+	PIMAGE_NT_HEADERS
+	NTAPI
+	RtlImageNtHeader(IN PVOID ModuleAddress );
+
 
 UCHAR *
 	PsGetProcessImageFileName(
 	__in PEPROCESS Process
 	);
+  
+ //PVOID NTAPI RtlImageDirectoryEntryToData(
+	//PVOID 	BaseAddress,
+	//BOOLEAN MappedAsImage,
+	//USHORT 	Directory,
+	//PULONG 	Size 
+	//);	
+
+typedef struct _PROCESS_INFO {   
+	DWORD   dwProcessId ;   
+	PUCHAR  pImageFileName ;   
+} PROCESS_INFO, *PPROCESS_INFO ;
+
+#define EPROCESS_SIZE     1  
+#define PEB_OFFSET          2  
+#define FILE_NAME_OFFSET        3  
+#define PROCESS_LINK_OFFSET     4  
+#define PROCESS_ID_OFFSET       5  
+#define EXIT_TIME_OFFSET        6 
+#define DebugPort_OFFSET    7
+#define PROCESS_ObjectTable_OFFSET 8
+ULONG GetPlantformDependentInfo ( ULONG dwFlag );
 
 //保存5字节代码的结构 
 #pragma pack(1) 
@@ -228,23 +287,37 @@ ULONG MyGetFunAddress( IN PCWSTR FunctionName);
 //ring0 遍历进程
 NTSTATUS Ring0EnumProcess();
 
+//是否开启PAE
+BOOLEAN isPaeOpened();
+
+
 //获取模块基地址
 ULONG GetModuleBase(PUCHAR moduleName);
 
-//************************************
-// Method:    GetSSDT_CurrAddr
-// FullName:  GetSSDT_CurrAddr
-// Access:    public 
-// Returns:   ULONG*
+///////////////////////////////////////////////////////////////////////////////   
+//  枚举进程——遍历通过EPROCESS结构的ActiveProcessLinks链表<BR>// 这个链表，其实就是全局变量PsActiveProcessHead所指示的链表    
+///////////////////////////////////////////////////////////////////////////////   
+void EnumProcessList ();
+
+//通过进程名称获取_eprocess结构指针
+ULONG GetProcessByName(PUCHAR pName);
+
+
 // Qualifier:获取SSDT函数当前地址
-// Parameter: void * func
-//************************************
 ULONG* GetSSDT_CurrAddr(void* func);
+
+//获取原始SSDT表上的原始函数RVA值
+ULONG GetOrgSSdtFuncRVA(ULONG index,PLOADED_KERNEL_INFO plki);
 
 PSYSTEM_DESCRIPTOR_TABLE GetShadowTable();
 
 //获取系统版本号
 ULONG GetVersion();
+
+//—EAT中定位到指定函数,MmGetSystemRoutineAddress实际调用的MiFindExportedRoutineByName
+PVOID MiFindExportedRoutineByName (IN PVOID DllBase,IN PANSI_STRING AnsiImageRoutineName);
+
+ULONG  GetOriginalKernelBase();
 
 //判断当前进程是否为DNF.exe
 BOOLEAN  IsDnfProcess();
@@ -278,3 +351,11 @@ BOOLEAN UnhookFunction(PVOID Function, PUCHAR JmpBuffer);
 void WriteJmp( PVOID Function,PVOID fakeFunction,PUCHAR JmpBuffer );
 
 
+NTSTATUS GetModuleInfo(
+	IN char*	chModName,
+	OUT PSYSTEM_MODULE_INFORMATION	psmi);
+
+NTSTATUS LoadKernelFile(OUT PLOADED_KERNEL_INFO plki);
+
+//已内存对齐方式把pFileBuffer加载到内存里
+BOOL ImageFile(PBYTE pFileBuffer,BYTE **ImageModuleBase);

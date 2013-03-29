@@ -52,7 +52,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Driver|Win32'">
     <ExecutablePath>D:\Project\IDE\WinDDK\7600.16385.1\bin\x86;$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(VCInstallDir)include;D:\Project\IDE\WinDDK\7600.16385.1\inc\ddk;D:\Project\IDE\WinDDK\7600.16385.1\inc;D:\Project\IDE\WinDDK\7600.16385.1\inc\api;$(IncludePath)</IncludePath>
+    <IncludePath>$(VCInstallDir)include;D:\Project\IDE\WinDDK\7600.16385.1\inc\api;D:\Project\IDE\WinDDK\7600.16385.1\inc\ddk;D:\Project\IDE\WinDDK\7600.16385.1\inc;$(IncludePath)</IncludePath>
     <LibraryPath>D:\Project\IDE\WinDDK\7600.16385.1\lib\win7\i386;$(LibraryPath)</LibraryPath>
     <TargetExt>.sys</TargetExt>
     <LinkIncremental>false</LinkIncremental>

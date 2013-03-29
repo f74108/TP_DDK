@@ -1,7 +1,7 @@
-﻿生成启动时间为 2013/3/24 23:57:35。
+﻿生成启动时间为 2013/3/29 1:33:03。
      1>项目“D:\Project\Driver\TP_DDK\sd_ddk.vcxproj”在节点 2 上(build 个目标)。
      1>InitializeBuildStatus:
-         正在创建“Driver\TP_DDK.unsuccessfulbuild”，因为已指定“AlwaysCreate”。
+         正在对“Driver\TP_DDK.unsuccessfulbuild”执行 Touch 任务。
        ClCompile:
          D:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\CL.exe /c /Z7 /nologo /W2 /WX- /Od /Oy- /D WIN32=100 /D _X86_=1 /D WINVER=0x501 /D DBG=1 /Gm- /EHsc /MTd /GS- /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Driver\\" /Fd"Driver\vc100.pdb" /Gz /TC /analyze- /errorReport:prompt hook.c
          hook.c
@@ -9,32 +9,21 @@
           
          ---------SYS妯″紡NO Include winioctl.h 
      1>hook.c(76): warning C4047: “=”:“ULONG”与“PVOID”的间接级别不同
-     1>hook.c(129): warning C4022: “memcpy”: 指针与实参 2 不匹配
-     1>hook.c(130): warning C4047: “=”:“PSYSTEM_DESCRIPTOR_TABLE”与“ULONG”的间接级别不同
-     1>hook.c(203): warning C4047: “=”:“ULONG”与“PUCHAR”的间接级别不同
-     1>hook.c(207): warning C4022: “ade32_get_code_length”: 指针与实参 1 不匹配
-     1>hook.c(241): warning C4026: 使用形参表声明的函数
-     1>hook.c(317): warning C4047: “=”:“ULONG”与“PUCHAR”的间接级别不同
-     1>hook.c(321): warning C4022: “ade32_get_code_length”: 指针与实参 1 不匹配
-     1>hook.c(357): warning C4026: 使用形参表声明的函数
-     1>hook.c(414): warning C4047: “=”:“ULONG”与“void (__stdcall *)()”的间接级别不同
-     1>hook.c(474): warning C4047: “=”:“ULONG”与“void (__stdcall *)()”的间接级别不同
-       Link:
-         D:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"D:\Project\Driver\TP_DDK\Driver\TP_DDK.sys" /INCREMENTAL:NO /NOLOGO ntoskrnl.lib Hal.lib wdm.lib wdmsec.lib wmilib.lib ndis.lib MSVCRT.LIB LIBCMT.LIB kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /ManifestFile:"Driver\TP_DDK.sys.intermediate.manifest" /MANIFESTUAC:NO /DEBUG /PDB:"D:\Project\Driver\TP_DDK\Driver\TP_DDK.pdb" /SUBSYSTEM:CONSOLE /Driver /TLBID:1 /ENTRY:"DriverEntry" /RELEASE /BASE:"0x10000 " /IMPLIB:"D:\Project\Driver\TP_DDK\Driver\TP_DDK.lib" /MACHINE:X86 Driver\ade32.obj
-         Driver\hook.obj
-         Driver\Inline_Hook_NtOpenProcess.obj
-         Driver\main.obj
-         Driver\ObCallbacks.obj
-         Driver\util.obj
-     1>LINK : warning LNK4078: 找到多个“INIT”节，它们具有不同的特性(E2000020)
-         sd_ddk.vcxproj -> D:\Project\Driver\TP_DDK\Driver\TP_DDK.sys
-       Manifest:
-         C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\mt.exe /nologo /verbose /outputresource:"D:\Project\Driver\TP_DDK\Driver\TP_DDK.sys;#1" /manifest Driver\TP_DDK.sys.intermediate.manifest
-       FinalizeBuildStatus:
-         正在删除文件“Driver\TP_DDK.unsuccessfulbuild”。
-         正在对“Driver\TP_DDK.lastbuildstate”执行 Touch 任务。
-     1>已完成生成项目“D:\Project\Driver\TP_DDK\sd_ddk.vcxproj”(build 个目标)的操作。
+     1>hook.c(160): warning C4022: “memcpy”: 指针与实参 2 不匹配
+     1>hook.c(161): warning C4047: “=”:“PSYSTEM_DESCRIPTOR_TABLE”与“ULONG”的间接级别不同
+     1>hook.c(201): warning C4022: “memcpy”: 指针与实参 2 不匹配
+     1>hook.c(208): warning C4047: “=”:“PSYSTEM_DESCRIPTOR_TABLE”与“ULONG”的间接级别不同
+     1>hook.c(285): error C2065: “g_Process_fnObOpenObjectByPointer”: 未声明的标识符
+     1>hook.c(308): warning C4047: “=”:“ULONG”与“PUCHAR”的间接级别不同
+     1>hook.c(310): warning C4022: “ade32_get_code_length”: 指针与实参 1 不匹配
+     1>hook.c(335): warning C4026: 使用形参表声明的函数
+     1>hook.c(405): warning C4047: “=”:“ULONG”与“PUCHAR”的间接级别不同
+     1>hook.c(409): warning C4022: “ade32_get_code_length”: 指针与实参 1 不匹配
+     1>hook.c(445): warning C4026: 使用形参表声明的函数
+     1>hook.c(502): warning C4047: “=”:“ULONG”与“void (__stdcall *)()”的间接级别不同
+     1>hook.c(562): warning C4047: “=”:“ULONG”与“void (__stdcall *)()”的间接级别不同
+     1>已完成生成项目“D:\Project\Driver\TP_DDK\sd_ddk.vcxproj”(build 个目标)的操作 - 失败。
 
-生成成功。
+生成失败。
 
-已用时间 00:00:00.36
+已用时间 00:00:00.16

@@ -44,8 +44,10 @@ void LoadImageNotifyRoutine(IN PUNICODE_STRING FullName,
 	IN PIMAGE_INFO ImageInfo);
 
 
-//加载在TP前，初始化
+//加载在TP前，初始化(获取未被hook的系统信息)
 void InitBeforeTP();
+//加载在TP启动后(获取TP原始代码)
+void InitAfterTp();
 //驱动卸载
 void TP_DDK_Unload();
 
@@ -75,11 +77,27 @@ void FkNtWriteVirtualMemory(BOOLEAN bFk);
 
 void __stdcall FakeNtWriteVirtualMemory();
 
-
+//#define crc_jmp 0xcf6f6 //VM后的crc检测，jmp偏移，
 #define AddrCRC1 0x1630
 #define AddrCRC2 0x4082
 #define AddrCRC3 0xd1a85
 #define DebugPortReset1 0x2228
+#define DebugPortReset2 0x6EA8
+#define DebugPortCheck1 0xba4ca
+#define DebugPortPop 0xbb0f0
+#define NtGetContextThread_SSDT_INDEX 85 
 //CRC校验
 void FkCRC(BOOLEAN bFk);
 void __stdcall FakeCRC3();
+
+//Debug清零
+void FkDebugReset(BOOLEAN bFk);
+void __stdcall FakeDebugPort();
+void __stdcall FakeDebugPortCheck();
+void __stdcall FakeDebugPortPop();
+
+//硬件断点
+//对Context的硬件断点寄存器清零
+void FkHardBreakPoint(BOOLEAN bFk);
+void ZeroHardBreakPoint(PCONTEXT pContext,KPROCESSOR_MODE Mode);
+void _stdcall FakeNtGetContextThread();

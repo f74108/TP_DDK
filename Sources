@@ -13,7 +13,5 @@ INCLUDES=$(BASEDIR)\inc;\
 SOURCES=util.c\
 		hook.c\
 		ade32.c\
-		Inline_Hook_NtOpenProcess.c\
-		ObCallbacks.c\
 		main.c\ 
 		

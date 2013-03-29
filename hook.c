@@ -96,6 +96,14 @@ void LoadImageNotifyRoutine(IN PUNICODE_STRING FullName,
 
 //全局变量
 PSYSTEM_DESCRIPTOR_TABLE KeServiceDescriptorTableShadow; //sstd Shadow
+
+ULONG NtOpenProcessCodeLen=0; //NtOpenProcess 跳转修改的代码长度
+UCHAR JmpBackNtOpenProcess[20]={0};
+ULONG g_uNtOpenProcessInjectAddr;
+
+UCHAR JmpBackNtOpenThread[20]={0};
+ULONG g_uNtOpenThreadInjectAddr;
+
 ULONG g_uNtReadVirtualMemoryAddr;
 ULONG g_uNtReadVirtualMemoryAddr_offest3;
 ULONG g_uNtWriteVirtualMemoryAddr;
@@ -105,14 +113,37 @@ UCHAR g_KiAttachProcess_10[10]={0};
 UCHAR JmpBackCRC3[25]={0};
 ULONG g_uCRC3Ret=0; //CRC3 TP原始jmp
 ULONG g_uDebugPort_Reset1=0; //debugPort清零函数1
-ULONG g_uDebugPort_Reset_4; //debugPort清零函数1 原前四节内容,用来骗过CRC检测
+ULONG g_uDebugPort_Reset1_4; //debugPort清零函数1 原前四节内容,用来骗过CRC检测
+ULONG g_uDebugPort_Reset2=0; //debugPort清零函数2
+ULONG g_uDebugPort_Reset2_4; //debugPort清零函数2 原前四节内容,用来骗过CRC检测
+ULONG g_uDebugPort_Pointer;   //debugPort指针
+ULONG g_uDebugPortRet;       //debugPort检测1的跳回地址
+UCHAR JmpBackDebugCheck[20]={0};
+ULONG g_uDebugPortPopRet; //debugPort还原POP的跳回地址
+UCHAR JmpBackDebugPop[20]={0};
+
+ULONG g_Process_fnObOpenObjectByPointer=0; //ObOpenObjectByPointer 函数地址
+ULONG g_uNtGetContextThreadAddr=0; //NtGetContextThread函数地址
+ULONG g_uNtGetContextThreadInjectAddr=0; //NtGetContextThread函数跳转地址
+UCHAR JmpBackNtGetContextThread[20]={0};
 //加载在TP前，初始化
 void InitBeforeTP()
 {
-	ULONG addrNtReadMemory,addrNtWriteMemory,
+	ULONG addrNtReadMemory,addrNtWriteMemory,uImageBase,
 		_KeStackAttachProcess,_Cur_KeStackAttachProcess,KiAttachProcess_bytes,_KiAttachProcess;
+
+	uImageBase=GetModuleBase("TesSafe.sys");
+	if(uImageBase>0)
+	{
+		KdPrint(("TP_DDK:TesSafe模块已被加载,第一初始化失败\n"));
+		return;
+	}
+
+	
+	g_uNtGetContextThreadAddr=SYSTEMSERVICE(NtGetContextThread_SSDT_INDEX);
 	addrNtReadMemory=(ULONG)KeServiceDescriptorTable->ServiceTableBase+186*4;
 	addrNtWriteMemory=(ULONG)KeServiceDescriptorTable->ServiceTableBase+277*4;
+
 	addrNtReadMemory=*(PULONG)addrNtReadMemory;
 	addrNtWriteMemory=*(PULONG)addrNtWriteMemory;
 
@@ -128,6 +159,84 @@ void InitBeforeTP()
 	 _KiAttachProcess=KiAttachProcess_bytes+_Cur_KeStackAttachProcess+5;
 	RtlCopyMemory(g_KiAttachProcess_10,_KiAttachProcess,10);
 	KeServiceDescriptorTableShadow=(ULONG)KeServiceDescriptorTable-0x40;
+}
+//加载在TP启动后(获取TP原始代码)
+void InitAfterTp()
+{
+	ULONG uImageBase,bytes_jmp;
+	ULONG crc3,dbgPortCheck1,dbgPortPop;
+	LOADED_KERNEL_INFO loadedkernelInfo;
+	ULONG rvaNtRead,rvaNtWrite,rvaKiAttachProcess;
+	ULONG _KeStackAttachProcess,_Cur_KeStackAttachProcess,
+		KiAttachProcess_bytes,_KiAttachProcess;
+
+
+	uImageBase=GetModuleBase("TesSafe.sys");
+	if(uImageBase==0)
+	{
+		KdPrint(("TP_DDK:获取TesSafe模块失败,第二初始化失败\n"));
+		return;
+	}
+
+	if (!NT_SUCCESS(LoadKernelFile(&loadedkernelInfo)))
+	{
+		KdPrint(("TP_DDK:载入新内核失败!\n"));
+		return;
+	}
+
+	rvaNtRead=GetOrgSSdtFuncRVA(SSDT_INDEX_NtReadVirtualMemory,&loadedkernelInfo);
+	rvaNtWrite=GetOrgSSdtFuncRVA(SSDT_INDEX_NtWriteVirtualMemory,&loadedkernelInfo);
+	g_uNtReadVirtualMemoryAddr=(ULONG)loadedkernelInfo.OriginalKernelBase+rvaNtRead;
+	g_uNtWriteVirtualMemoryAddr=(ULONG)loadedkernelInfo.OriginalKernelBase+rvaNtWrite;
+	g_uNtReadVirtualMemoryAddr_offest3=*(PULONG)((ULONG)loadedkernelInfo.NewKernelBase+rvaNtRead+3)-LoadBase;
+	g_uNtWriteVirtualMemoryAddr_offset3=*(PULONG)((ULONG)loadedkernelInfo.NewKernelBase+rvaNtWrite+3)-LoadBase;
+
+	//保存KiAttachProcess前10字节
+	_KeStackAttachProcess=MyGetFunAddress(L"KeStackAttachProcess");
+	_Cur_KeStackAttachProcess=_KeStackAttachProcess+0x65;
+	KiAttachProcess_bytes=*(PULONG)(_Cur_KeStackAttachProcess+1);
+	_KiAttachProcess=KiAttachProcess_bytes+_Cur_KeStackAttachProcess+5;
+	rvaKiAttachProcess=_KiAttachProcess-(ULONG)loadedkernelInfo.OriginalKernelBase;
+	_KiAttachProcess=(ULONG)loadedkernelInfo.NewKernelBase+rvaKiAttachProcess;
+	RtlCopyMemory(g_KiAttachProcess_10,_KiAttachProcess,10);
+
+	g_uNtGetContextThreadAddr=SYSTEMSERVICE(NtGetContextThread_SSDT_INDEX);
+	//释放新加载的内核
+	if(loadedkernelInfo.NewKernelBase!=NULL)
+		ExFreePool(loadedkernelInfo.NewKernelBase);
+
+	KeServiceDescriptorTableShadow=(ULONG)KeServiceDescriptorTable-0x40;
+
+	crc3=uImageBase+AddrCRC3;
+	bytes_jmp=*(PULONG)(crc3+3);
+	//bytes_jmp=g_uCRC3Ret-(crc3+2)-5
+	g_uCRC3Ret= bytes_jmp+(crc3+2)+5;  //保存CRC检测3的原始Jmp
+	g_uDebugPort_Reset1=uImageBase+DebugPortReset1; //初始化清零函数1地址
+	g_uDebugPort_Reset1_4=*(PULONG)g_uDebugPort_Reset1; //保存清零函数1前四节
+	g_uDebugPort_Reset2=uImageBase+DebugPortReset2; //初始化清零函数2地址
+	g_uDebugPort_Reset2_4=*(PULONG)g_uDebugPort_Reset2; //保存清零函数2前四节
+
+	dbgPortCheck1=uImageBase+DebugPortCheck1;
+	bytes_jmp=*(PULONG)(dbgPortCheck1+3);
+	//bytes_jmp=g_uDebugPortRet-(dbgPortCheck1+2)-5
+	g_uDebugPortRet= bytes_jmp+(dbgPortCheck1+2)+5; //保存debugPort检测1的原始Jmp
+	g_uDebugPort_Pointer=GetProcessByName(GameProcessName)+
+					GetPlantformDependentInfo(DebugPort_OFFSET);//获取debugPort指针
+
+		
+	dbgPortPop=uImageBase+DebugPortPop;
+	bytes_jmp=*(PULONG)(dbgPortPop+3);
+	//bytes_jmp=g_uDebugPortPopRet-(dbgPortPop+2)-5
+	g_uDebugPortPopRet= bytes_jmp+(dbgPortPop+2)+5; //保存debugPort清零POP的原始Jmp
+
+	FkCRC(TRUE);
+	FkDebugReset(TRUE);
+	FkNtOpenProcss(TRUE);
+	FkNtOpenThread(TRUE);
+	ReSumeKiAttachProcess();
+	FkNtWriteVirtualMemory(TRUE);
+	FkNtReadVirtualMemory(TRUE);
+	FkHardBreakPoint(TRUE);
 }
 
 //驱动卸载
@@ -162,12 +271,6 @@ void ReSumeKiAttachProcess()
 		KdPrint(("TP_DDK: 解除KiAttachProcess\n"));
 }
 
-/************************************************************************/
-/*TP_NtOpenProcess                                                              */
-/************************************************************************/
-ULONG NtOpenProcessCodeLen=0; //NtOpenProcess 跳转修改的代码长度
-ULONG g_Process_fnObOpenObjectByPointer=0; //ObOpenObjectByPointer 函数地址
-ULONG g_Process_HookObOpenObjectByPointer; //写入jmp的地址
 void FkNtOpenProcss(BOOLEAN bFk)
 {
 	KIRQL Irql;
@@ -200,43 +303,32 @@ void FkNtOpenProcss(BOOLEAN bFk)
 			KdPrint(("TP_DDK: 找不到 ObOpenObjectByPointer 函数地址\n"));
 			return;
 		}
-		g_Process_HookObOpenObjectByPointer=p+1;
+		g_uNtOpenProcessInjectAddr=p+1;
 
+		NtOpenProcessCodeLen=ade32_get_code_length(g_uNtOpenProcessInjectAddr,5);
 
-		//保存旧的buffer
-		NtOpenProcessCodeLen=ade32_get_code_length(g_Process_HookObOpenObjectByPointer,5);
-		RtlCopyMemory((PVOID)JmpNtOpenProcess,(PVOID)g_Process_HookObOpenObjectByPointer,NtOpenProcessCodeLen);
-	
-
-		//写入跳转 bytes=JmpNtOpenProcess-g_HookObOpenObjectByPointer-5;
-		bytes=(ULONG)JmpNtOpenProcess-g_Process_HookObOpenObjectByPointer-5;
 		DisableWP();
 		Irql=KeRaiseIrqlToDpcLevel();
-		*(PUCHAR)g_Process_HookObOpenObjectByPointer=0xE9;
-		RtlCopyMemory((PVOID)(g_Process_HookObOpenObjectByPointer+1),&bytes,sizeof(ULONG));
+		RtlCopyMemory((PVOID)JmpNtOpenProcess,(PVOID)g_uNtOpenProcessInjectAddr,NtOpenProcessCodeLen);
 		KeLowerIrql(Irql);
 		EnableWP();
+		WriteJmp((PVOID)g_uNtOpenProcessInjectAddr,JmpNtOpenProcess,JmpBackNtOpenProcess);
 
 		KdPrint(("TP_DDK: 解除NtOpenProcess保护!\n"));
 	}
 	else
 	{
-		if(*(PUCHAR)JmpNtOpenProcess==0 || *(PUCHAR)JmpNtOpenProcess == 0x90)
+		if(!MmIsAddressValid(JmpNtOpenProcess))
 			return;
-		DisableWP();
-		Irql=KeRaiseIrqlToDpcLevel();
-		RtlCopyMemory((PVOID)g_Process_HookObOpenObjectByPointer,JmpNtOpenProcess,NtOpenProcessCodeLen);
-		*(PUCHAR)JmpNtOpenProcess=0;
-		KeLowerIrql(Irql);
-		EnableWP();
-
+		UnhookFunction((PVOID)g_uNtOpenProcessInjectAddr,JmpBackNtOpenProcess);
+		
 		KdPrint(("TP_DDK: 还原NtOpenProcess保护!\n"));
 	}
 	
 
 }
 
-BOOLEAN  g_NtOpenProcess_bIsDnfProcess=FALSE; //全局变量：是否是dnf进程
+
  __declspec(naked) void __stdcall JmpNtOpenProcess()
  {
 	 __asm
@@ -249,36 +341,30 @@ BOOLEAN  g_NtOpenProcess_bIsDnfProcess=FALSE; //全局变量：是否是dnf进程
 		 nop
 		 nop
 		 nop
-		 nop
-		 nop
-		 nop
-		 nop
 		 pushad
 		 pushfd
 		 call IsDnfProcess
-		 mov g_NtOpenProcess_bIsDnfProcess,al
+		 cmp al,0
+		 je NotNDF
 		 popfd
 		 popad
-		 cmp g_NtOpenProcess_bIsDnfProcess,0
-		 je NotNDF
-		 mov eax,g_Process_HookObOpenObjectByPointer;
+		
+		 mov eax,g_uNtOpenProcessInjectAddr
 		 add eax,NtOpenProcessCodeLen;
 		 jmp eax //DNF进程，执行TP的流程
 NotNDF:	
-		 mov eax,g_Process_fnObOpenObjectByPointer
+		 popfd
+		 popad
+		 mov eax,[g_Process_fnObOpenObjectByPointer]
 		 call eax //调用原生ObOpenObjectByPointer
-		 mov edi, g_Process_HookObOpenObjectByPointer
-		 add edi,NtOpenProcessCodeLen
+		 mov edi, [g_uNtOpenProcessInjectAddr]
+		 add edi,[NtOpenProcessCodeLen]
 		 add edi,5
 		 jmp edi	
 	 }
  }
 
 
-
- /************************************************************************/
- /*TP_NtOpenThread                                                                      */
- /************************************************************************/
  ULONG NtOpenThreadCodeLen=0; //NtOpenProcess 跳转修改的代码长度
  ULONG g_Thread_fnObOpenObjectByPointer=0; //ObOpenObjectByPointer 函数地址
  ULONG g_Thread_HookObOpenObjectByPointer; //写入jmp的地址
@@ -391,9 +477,7 @@ NotNDF:
  }
 
 
- /************************************************************************/
- /*TP_NtReadVirtualMemory                                                        */
- /************************************************************************/
+
  void FkNtReadVirtualMemory( BOOLEAN bFk )
  {
 	 KIRQL Irql;
@@ -451,9 +535,7 @@ __declspec(naked)  void __stdcall FakeNtReadVirtualMemory()
 	 }
  }
 
-/************************************************************************/
-/*TP_NtWriteVirtualMemory                                                        */
-/************************************************************************/
+
 void FkNtWriteVirtualMemory( BOOLEAN bFk )
 {
 	KIRQL Irql;
@@ -529,10 +611,13 @@ void FkCRC( BOOLEAN bFk )
 	crc3=uImageBase+AddrCRC3;
 	if(bFk)
 	{
-		ULONG bytes_jmp;
-		g_uCRC3Ret= uImageBase+0xcf6f6;
-		g_uDebugPort_Reset1=uImageBase+DebugPortReset1; //初始化清零函数1地址
-		g_uDebugPort_Reset_4=*(PULONG)g_uDebugPort_Reset1; //保存清零函数1前四节
+		//ULONG bytes_jmp=*(PULONG)(crc3+3);
+		////bytes_jmp=g_uCRC3Ret-(crc3+2)-5
+		//g_uCRC3Ret= bytes_jmp+(crc3+2)+5;
+		//g_uDebugPort_Reset1=uImageBase+DebugPortReset1; //初始化清零函数1地址
+		//g_uDebugPort_Reset1_4=*(PULONG)g_uDebugPort_Reset1; //保存清零函数1前四节
+		//g_uDebugPort_Reset2=uImageBase+DebugPortReset2; //初始化清零函数2地址
+		//g_uDebugPort_Reset2_4=*(PULONG)g_uDebugPort_Reset2; //保存清零函数2前四节
 		
 		DisableWP();
 		Irql=KeRaiseIrqlToDpcLevel();
@@ -569,34 +654,235 @@ __declspec(naked) void __stdcall FakeCRC3()
 	__asm
 	{
 		pushfd
+
 		cmp edx,g_uDebugPort_Reset1
-		je g_uDebugPort_Reset1_4
+		je l_DebugPort_Reset1_4
+
+		cmp edx,g_uDebugPort_Reset2
+		je l_DebugPort_Reset2_4
 
 		popfd
 		push [edx]
 		jmp [g_uCRC3Ret]
 
-g_uDebugPort_Reset1_4:
+
+l_DebugPort_Reset1_4:
 		popfd
-		push [g_uDebugPort_Reset_4]
+		push [g_uDebugPort_Reset1_4]
 		jmp [g_uCRC3Ret]
+
+l_DebugPort_Reset2_4:
+		popfd
+		push [g_uDebugPort_Reset2_4]
+		jmp [g_uCRC3Ret]
+
+		
 
 
 	}
 }
 
-__declspec(naked) void __stdcall FakeCRC2()
+
+void FkDebugReset( BOOLEAN bFk )
+{
+	KIRQL Irql;
+	ULONG uImageBase,dbgPortCheck1,dbgPortPop;
+	uImageBase=uImageBase=GetModuleBase("TesSafe.sys");
+	if(uImageBase==0)
+	{
+		KdPrint(("TP_DDK:获取TesSafe模块失败,解除Debug清零失败\n"));
+		return;
+	}
+	dbgPortCheck1=uImageBase+DebugPortCheck1;
+	dbgPortPop=uImageBase+DebugPortPop;
+	if (bFk)
+	{
+		DisableWP();
+		Irql=KeRaiseIrqlToDpcLevel();
+
+		*(PUCHAR)g_uDebugPort_Reset1=0xC3; //废除DebugPort清零函数1
+		*(PUCHAR)g_uDebugPort_Reset2=0xC3; //废除DebugPort清零函数2
+
+		KeLowerIrql(Irql);
+		EnableWP();
+
+		WriteJmp((PVOID)dbgPortCheck1,FakeDebugPortCheck,JmpBackDebugCheck); //跳过debugPort清零检测push
+		WriteJmp((PVOID)dbgPortPop,FakeDebugPortPop,JmpBackDebugPop); //跳过debugPort清零pop
+
+
+		KdPrint(("TP_DDK:解除DebugPort清零函数1\n"));
+		KdPrint(("TP_DDK:解除DebugPort清零函数2\n"));
+		KdPrint(("TP_DDK:解除DebugPort清零push函数1\n"));
+		KdPrint(("TP_DDK:解除DebugPort清零pop函数\n"));
+	}
+	else
+	{
+		DisableWP();
+		Irql=KeRaiseIrqlToDpcLevel();
+
+		*(PULONG)g_uDebugPort_Reset1=g_uDebugPort_Reset1_4; //还原DebugPort清零函数1
+		*(PULONG)g_uDebugPort_Reset2=g_uDebugPort_Reset2_4; //还原DebugPort清零函数2
+
+		KeLowerIrql(Irql);
+		EnableWP();
+		UnhookFunction((PVOID)dbgPortCheck1,JmpBackDebugCheck);
+
+		KdPrint(("TP_DDK:恢复DebugPort清零函数1\n"));
+		KdPrint(("TP_DDK:恢复DebugPort清零函数2\n"));
+		KdPrint(("TP_DDK:恢复DebugPort清零push函数1\n"));
+		KdPrint(("TP_DDK:恢复DebugPort清零pop函数\n"));
+	}
+}
+
+__declspec(naked) void __stdcall FakeDebugPort()
 {
 	__asm
 	{
-		push eax
-		mov eax,[esp+4]
-		cmp eax,g_uDebugPort_Reset1
-		jne notTarget
-		add eax,4
-		mov [esp+4],eax
-notTarget:
-		pop eax
+		pushfd
+
+			cmp edx,g_uDebugPort_Reset1
+			je l_DebugPort_Reset1_4
+
+			cmp edx,g_uDebugPort_Reset2
+			je l_DebugPort_Reset2_4
+
+			popfd
+			push [edx]
 		jmp [g_uCRC3Ret]
+
+
+l_DebugPort_Reset1_4:
+		popfd
+			push [g_uDebugPort_Reset1_4]
+		jmp [g_uCRC3Ret]
+
+l_DebugPort_Reset2_4:
+		popfd
+			push [g_uDebugPort_Reset2_4]
+		jmp [g_uCRC3Ret]
+
+
+
+
 	}
 }
+
+__declspec(naked) void __stdcall FakeDebugPortCheck()
+{
+	__asm
+	{
+		pushfd
+		cmp edx,g_uDebugPort_Pointer
+		je l_DebugPort_Pointer
+
+		popfd
+		push [edx]
+		jmp [g_uDebugPortRet]
+
+l_DebugPort_Pointer:
+		popfd
+		push 0
+		jmp [g_uDebugPortRet]
+	}
+}
+
+__declspec(naked) void __stdcall FakeDebugPortPop()
+{
+	__asm
+	{
+		pushfd
+		cmp edx,g_uDebugPort_Pointer
+		je l_DebugPort_Pointer
+
+		popfd
+		pop DWORD ptr [edx]
+		jmp [g_uDebugPortPopRet]
+
+l_DebugPort_Pointer:
+		popfd
+		add esp,0x4
+		jmp [g_uDebugPortPopRet]
+	}
+}
+
+
+ void __stdcall ZeroHardBreakPoint( PCONTEXT pContext,KPROCESSOR_MODE Mode )
+{
+	if(IsDnfProcess())
+	{
+		__try
+		{
+			if(Mode!=KernelMode)
+			{
+				ProbeForWrite(pContext,sizeof(CONTEXT),sizeof(UCHAR));
+				pContext->Dr0=0;
+				pContext->Dr1=0;
+				pContext->Dr2=0;
+				pContext->Dr3=0;
+				pContext->Dr6=0;
+				pContext->Dr7=0;
+			}
+		}
+		__except(EXCEPTION_EXECUTE_HANDLER)
+		{
+			return;
+		}
+	}
+}
+
+ __declspec(naked) void _stdcall FakeNtGetContextThread()
+ {
+	 __asm
+	 {
+		 pushad
+		 pushfd
+		 push [ebp-0x4]
+		 push [ebp+0xC]
+		 call ZeroHardBreakPoint
+		 popfd
+		 popad
+		 mov eax,esi
+		 pop esi
+		 mov esp,ebp
+		 pop ebp
+		 retn 0x8
+	 }
+ }
+
+ void FkHardBreakPoint( BOOLEAN bFk )
+ {
+	 __asm int 3
+	 if(bFk)
+	 {
+		 BOOLEAN bFound=FALSE;
+		 ULONG i;
+		 ULONG p=g_uNtGetContextThreadAddr;
+		 for(i=0;i<0x100;i++)
+		 {
+			 if(*(PUCHAR)(p+0)==0x8B &&
+				*(PUCHAR)(p+1)==0xC6 &&
+				*(PUCHAR)(p+2)==0x5E &&
+				*(PUCHAR)(p+3)==0xC9)
+			 {
+				 bFound=TRUE;
+				 g_uNtGetContextThreadInjectAddr=p;
+				 break;
+			 }
+			 p++;
+		 }
+		 if(!bFound)
+		 {
+			 KdPrint(("TP_DDK: 找不到NtGetContextThreadInjectAddr \n"));
+			 return;
+		 }
+
+		 WriteJmp((PVOID)g_uNtGetContextThreadInjectAddr,FakeNtGetContextThread,JmpBackNtGetContextThread);
+	 }
+	 else
+	 {
+		 if(g_uNtGetContextThreadInjectAddr==0)
+			 return;
+		 UnhookFunction((PVOID)g_uNtGetContextThreadInjectAddr,JmpBackNtGetContextThread);
+	 }
+ }
+

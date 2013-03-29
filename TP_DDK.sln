@@ -8,6 +8,8 @@ Global
 		Debug|Win32 = Debug|Win32
 		Driver|Win32 = Driver|Win32
 		Release|Win32 = Release|Win32
+		WLH checked|Win32 = WLH checked|Win32
+		WLH free|Win32 = WLH free|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Debug|Win32.ActiveCfg = Debug|Win32
@@ -16,6 +18,10 @@ Global
 		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Driver|Win32.Build.0 = Driver|Win32
 		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Release|Win32.ActiveCfg = Release|Win32
 		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.Release|Win32.Build.0 = Release|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.WLH checked|Win32.ActiveCfg = Release|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.WLH checked|Win32.Build.0 = Release|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.WLH free|Win32.ActiveCfg = Release|Win32
+		{FBD3CCF0-88A5-4753-9FD8-FC0E43F73CBE}.WLH free|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

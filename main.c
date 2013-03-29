@@ -1,65 +1,92 @@
 
 #include <ntddk.h>
 #include "util.h"
-#include "Inline_Hook_NtOpenProcess.h"
 #include "hook.h"
 
 
 void DDK_Unload(IN PDRIVER_OBJECT pDRIVER_OBJECT);
-NTSTATUS ddk_DispatchRoutine_CONTROL(IN PDEVICE_OBJECT pDevobj,IN PIRP pIrp	);
-NTSTATUS DispatchClose(PDEVICE_OBJECT pDevObj, PIRP pIrp);
+NTSTATUS  Comm_Create(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp);
+NTSTATUS  Comm_Close(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp);
+NTSTATUS Comm_Default(IN PDEVICE_OBJECT pDevObj, IN PIRP pIrp);
+NTSTATUS Comm_IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+NTSTATUS COMM_DirectOutIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite);
+NTSTATUS COMM_DirectInIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite);
+NTSTATUS COMM_BufferedIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite);
+NTSTATUS COMM_NeitherIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite);
+NTSTATUS COMM_TP_DDK(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite);
 
-#pragma INITCODE
+
 NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObj,PUNICODE_STRING B)
 {
 
 	KdPrint(("TP_DDK Entry:....\n"));
+
+
 	pDriverObj->DriverUnload=DDK_Unload;
 	//注册派遣函数
-	pDriverObj->MajorFunction[IRP_MJ_CREATE]=ddk_DispatchRoutine_CONTROL; //IRP_MJ_CREATE相关IRP处理数
-	pDriverObj->MajorFunction[IRP_MJ_CLOSE]=DispatchClose; //IRP_MJ_CREATE相关IRP处理数
-	pDriverObj->MajorFunction[IRP_MJ_READ]=ddk_DispatchRoutine_CONTROL; //IRP_MJ_CREATE相关IRP处理函数
-	pDriverObj->MajorFunction[IRP_MJ_CLOSE]=ddk_DispatchRoutine_CONTROL; //IRP_MJ_CREATE相关IRP处理数
-	pDriverObj->MajorFunction[IRP_MJ_DEVICE_CONTROL]=ddk_DispatchRoutine_CONTROL; //IRP_MJ_CREATE相关		IRP处理函数
-	
-	CreateMyDevice(pDriverObj);//创建相应的设备
+	pDriverObj->MajorFunction[IRP_MJ_CREATE]=Comm_Create; 
+	pDriverObj->MajorFunction[IRP_MJ_CLOSE]=Comm_Close;
+	pDriverObj->MajorFunction[IRP_MJ_READ]=Comm_Default;
+	pDriverObj->MajorFunction[IRP_MJ_DEVICE_CONTROL]=Comm_IoControl;
 
-	
+	if(!NT_SUCCESS(CreateMyDevice(pDriverObj))) //创建相应的设备
+		KdPrint(("创建设备失败..\n"));
 	//Inline_Hook_NtOpenProcess();
 	//handleObjectHook(TRUE);
 	//PsSetLoadImageNotifyRoutine(LoadImageNotifyRoutine); //加载载入映像回调
-	InitBeforeTP();
- 	KdPrint(("TesSafe: %x\n",GetModuleBase("tessafe.sys")));
-	FkCRC(TRUE);
+	InitAfterTp();
+
 	return STATUS_SUCCESS;
 }
 
 
 void DDK_Unload(IN PDRIVER_OBJECT pDRIVER_OBJECT)
 {
-	PDEVICE_OBJECT pDev;
 	UNICODE_STRING symLinkName;
-	FkCRC(FALSE);
-	//TP_DDK_Unload();
-	//Inline_unHook_NtOpenProcess();
-	//handleObjectHook(FALSE);
-	//PsRemoveLoadImageNotifyRoutine(LoadImageNotifyRoutine); //卸载映像回调
-	
-
-	pDev=pDRIVER_OBJECT->DeviceObject;
-	IoDeleteDevice(pDev); //删除设备
-	RtlInitUnicodeString(&symLinkName,TP_symLinkName);	//删除符号链接名字
+	if(pDRIVER_OBJECT->DeviceObject!=NULL)
+		IoDeleteDevice(pDRIVER_OBJECT->DeviceObject); //删除设备
+	RtlInitUnicodeString(&symLinkName,L"\\??\\TP_DDK");	//删除符号链接名字
 	IoDeleteSymbolicLink(&symLinkName);
 	KdPrint(("设备卸载成功...\n"));
 	KdPrint(("TP_DDK 驱动卸载成功...\n"));
 }
 
-NTSTATUS ddk_DispatchRoutine_CONTROL(IN PDEVICE_OBJECT pDevobj,IN PIRP pIrp	)
+NTSTATUS Comm_IoControl(IN PDEVICE_OBJECT pDevobj,IN PIRP pIrp	)
 {
-	ULONG info,mf;
-	PIO_STACK_LOCATION stack;
-	info=0;
-	stack=IoGetCurrentIrpStackLocation(pIrp); //得到当前栈指针
+	NTSTATUS status = STATUS_NOT_SUPPORTED;
+	PIO_STACK_LOCATION irpStack = NULL;
+	UINT sizeofWrite = 0;
+
+	//KdPrint(("Comm_IoControl\n"));
+	irpStack=IoGetCurrentIrpStackLocation(pIrp); //得到当前栈指针
+
+	if(irpStack)
+	{
+		switch(irpStack->Parameters.DeviceIoControl.IoControlCode)
+		{
+			case IOCTL_COMM_DIRECT_IN_IO:	//直接输入缓冲输出I/O(METHOD_IN_DIRECT)
+				status=COMM_DirectInIo(pIrp,irpStack,&sizeofWrite);
+				break;
+
+			case  IOCTL_COMM_DIRECT_OUT_IO:	//缓冲输入直接输出I/O(METHOD_OUT_DIRECT)
+				status=COMM_DirectOutIo(pIrp,irpStack,&sizeofWrite);
+				break;
+
+			case  IOCTL_COMM_BUFFERED_IO:	//输入输出缓冲I/O(METHOD_BUFFERED)
+				status=COMM_BufferedIo(pIrp,irpStack,&sizeofWrite);
+				break;
+
+			case IOCTL_COMM_NEITHER_IO:		//上面三种方法都不是(METHOD_NEITHER)
+				status=COMM_NeitherIo(pIrp,irpStack,&sizeofWrite);
+				break;
+
+			case IOCTL_TP_DDK_ENABLE:
+				status=COMM_TP_DDK(pIrp,irpStack,&sizeofWrite);
+				break;
+		}
+	}
+
+	/*
 	mf=stack->MajorFunction;
 	switch(mf)
 	{
@@ -107,12 +134,16 @@ NTSTATUS ddk_DispatchRoutine_CONTROL(IN PDEVICE_OBJECT pDevobj,IN PIRP pIrp	)
 				}
 			case TP_DDK_Enable_Code:
 				{
-					KdPrint(("TP_DDK_Enable_Code:\n"));
-					ReSumeKiAttachProcess();
+					//__asm int 3
+					//KdPrint(("TP_DDK_Enable_Code:\n"));
+					
+					InitAfterTp();
 					FkNtOpenProcss(TRUE);
 					FkNtOpenThread(TRUE);
-					FkNtReadVirtualMemory(TRUE);
-					FkNtWriteVirtualMemory(TRUE);
+					FkCRC(TRUE);
+					//FkDebugReset(TRUE);
+					ReSumeKiAttachProcess();
+
 					break;
 				}
 			}
@@ -133,19 +164,152 @@ NTSTATUS ddk_DispatchRoutine_CONTROL(IN PDEVICE_OBJECT pDevobj,IN PIRP pIrp	)
 			break;
 		}
 	}
-
+	*/
 	//对相应的IPR进行处理
-	pIrp->IoStatus.Information=info; //设置操作的字节数为0，这里无实际意义
-	pIrp->IoStatus.Status=STATUS_SUCCESS;//返回成功
+
+	pIrp->IoStatus.Information=sizeofWrite;
+	pIrp->IoStatus.Status=status;
 	IoCompleteRequest(pIrp,IO_NO_INCREMENT);//指示完成此IRP
-	return STATUS_SUCCESS; 
+	return status; 
 }
 
-NTSTATUS DispatchClose(PDEVICE_OBJECT pDevObj, PIRP pIrp)
+NTSTATUS Comm_Close(PDEVICE_OBJECT pDevObj, PIRP pIrp)
 {
 	pIrp->IoStatus.Status = STATUS_SUCCESS;
 	pIrp->IoStatus.Information = 0;
 	IoCompleteRequest(pIrp, IO_NO_INCREMENT);
-	KdPrint (("DispatchClose \n"));
 	return STATUS_SUCCESS;
+}
+
+NTSTATUS Comm_Create(IN PDEVICE_OBJECT pDevObj, IN PIRP pIrp)
+{
+	pIrp->IoStatus.Status = STATUS_SUCCESS;
+	pIrp->IoStatus.Information = 0;
+	IoCompleteRequest(pIrp, IO_NO_INCREMENT);
+
+	return pIrp->IoStatus.Status;
+}
+
+NTSTATUS Comm_Default(IN PDEVICE_OBJECT pDevObj, IN PIRP pIrp)
+{
+	pIrp->IoStatus.Status = STATUS_SUCCESS;
+	pIrp->IoStatus.Information = 0;
+	IoCompleteRequest(pIrp, IO_NO_INCREMENT);
+
+	return pIrp->IoStatus.Status;
+}
+
+
+NTSTATUS COMM_DirectInIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite)
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	PVOID pInputBuffer, pOutputBuffer;
+	ULONG  outputLength, inputLength;
+
+	outputLength=pIoStackIrp->Parameters.DeviceIoControl.OutputBufferLength;
+	inputLength=pIoStackIrp->Parameters.DeviceIoControl.InputBufferLength;
+	pInputBuffer=Irp->AssociatedIrp.SystemBuffer;
+	pOutputBuffer = NULL;
+
+	if(Irp->MdlAddress)
+		pOutputBuffer=MmGetSystemAddressForMdlSafe(Irp->MdlAddress,NormalPagePriority);
+	
+	if(pOutputBuffer && pOutputBuffer)
+	{
+		//KdPrint(("IOCTL_COMM_DIRECT_IN_IO-> UserModeMessage = %s \n", pInputBuffer));
+		//RtlCopyMemory(pOutputBuffer,pInputBuffer,outputLength);
+		*sizeofWrite = outputLength;
+
+		InitAfterTp();
+		status = STATUS_SUCCESS;
+	}
+
+	return status;
+}
+
+NTSTATUS COMM_DirectOutIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite)
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	PVOID pInputBuffer, pOutputBuffer;
+	ULONG  outputLength, inputLength;
+
+	//KdPrint(("COMM_DirectOutIo\r\n"));
+
+	outputLength = pIoStackIrp->Parameters.DeviceIoControl.OutputBufferLength;
+	inputLength  = pIoStackIrp->Parameters.DeviceIoControl.InputBufferLength;
+	pInputBuffer = Irp->AssociatedIrp.SystemBuffer;
+	pOutputBuffer = NULL;
+
+	if(Irp->MdlAddress)
+		pOutputBuffer = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
+
+	if(pInputBuffer && pOutputBuffer)
+	{                                                          
+		KdPrint(("COMM_DirectOutIo UserModeMessage = '%s'", pInputBuffer));
+		RtlCopyMemory(pOutputBuffer, pInputBuffer, outputLength);
+		*sizeofWrite = outputLength;
+		status = STATUS_SUCCESS;
+	}
+	return status;
+}
+
+NTSTATUS COMM_BufferedIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite)
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	PVOID pInputBuffer, pOutputBuffer;
+	ULONG  outputLength, inputLength;
+
+	KdPrint(("COMM_BufferedIo\r\n"));
+
+	outputLength = pIoStackIrp->Parameters.DeviceIoControl.OutputBufferLength;
+	inputLength  = pIoStackIrp->Parameters.DeviceIoControl.InputBufferLength;
+	pInputBuffer = Irp->AssociatedIrp.SystemBuffer;
+	pOutputBuffer = Irp->AssociatedIrp.SystemBuffer;
+
+	if(pInputBuffer && pOutputBuffer)
+	{              
+		KdPrint(("COMM_BufferedIo UserModeMessage = '%s'", pInputBuffer));
+		//RtlCopyMemory(pOutputBuffer, pInputBuffer, outputLength);
+		*sizeofWrite = outputLength;
+
+
+		status = STATUS_SUCCESS;
+	}
+	return status;
+}
+
+NTSTATUS COMM_NeitherIo(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite)
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	PVOID pInputBuffer, pOutputBuffer;
+	ULONG  outputLength, inputLength;
+
+	KdPrint(("COMM_NeitherIo\r\n"));
+
+	outputLength  = pIoStackIrp->Parameters.DeviceIoControl.OutputBufferLength;
+	inputLength   = pIoStackIrp->Parameters.DeviceIoControl.InputBufferLength;
+	pInputBuffer  = pIoStackIrp->Parameters.DeviceIoControl.Type3InputBuffer;
+	pOutputBuffer = Irp->UserBuffer;
+
+	if(pInputBuffer && pOutputBuffer)
+	{              
+		KdPrint(("COMM_NeitherIo UserModeMessage = '%s'", pInputBuffer));
+		RtlCopyMemory(pOutputBuffer, pInputBuffer, outputLength);
+		*sizeofWrite = outputLength;
+		status = STATUS_SUCCESS;
+	}
+	return status;
+}
+
+NTSTATUS COMM_TP_DDK(PIRP Irp, PIO_STACK_LOCATION pIoStackIrp, UINT *sizeofWrite)
+{
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	PVOID pInputBuffer, pOutputBuffer;
+	ULONG  outputLength, inputLength;
+
+	//KdPrint(("COMM_TP_DDK\r\n"));
+
+	status = STATUS_SUCCESS;
+	
+	return status;
 }
