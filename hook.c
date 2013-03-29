@@ -101,8 +101,10 @@ ULONG NtOpenProcessCodeLen=0; //NtOpenProcess 跳转修改的代码长度
 UCHAR JmpBackNtOpenProcess[20]={0};
 ULONG g_uNtOpenProcessInjectAddr;
 
+ULONG NtOpenThreadCodeLen=0; //NtOpenThread 跳转修改的代码长度
 UCHAR JmpBackNtOpenThread[20]={0};
 ULONG g_uNtOpenThreadInjectAddr;
+
 
 ULONG g_uNtReadVirtualMemoryAddr;
 ULONG g_uNtReadVirtualMemoryAddr_offest3;
@@ -365,11 +367,10 @@ NotNDF:
  }
 
 
- ULONG NtOpenThreadCodeLen=0; //NtOpenProcess 跳转修改的代码长度
- ULONG g_Thread_fnObOpenObjectByPointer=0; //ObOpenObjectByPointer 函数地址
- ULONG g_Thread_HookObOpenObjectByPointer; //写入jmp的地址
+
  void FkNtOpenThread(BOOLEAN bFk)
  {
+
 	 KIRQL Irql;
 	 BOOLEAN bFound;
 	 PUCHAR p;
@@ -377,7 +378,7 @@ NotNDF:
 	 bFound=FALSE;
 	 p=(PUCHAR)NtOpenThread;;
 	 i=0;
-	 g_Thread_fnObOpenObjectByPointer=MyGetFunAddress(L"ObOpenObjectByPointer");
+	 g_Process_fnObOpenObjectByPointer=MyGetFunAddress(L"ObOpenObjectByPointer");
 
 	 if(bFk)
 	 {
@@ -400,45 +401,31 @@ NotNDF:
 			 KdPrint(("TP_DDK: 找不到 ObOpenObjectByPointer 函数地址\n"));
 			 return;
 		 }
-		 g_Thread_HookObOpenObjectByPointer=p+1;
+		 g_uNtOpenThreadInjectAddr=p+1;
 
+		 NtOpenThreadCodeLen=ade32_get_code_length(g_uNtOpenThreadInjectAddr,5);
 
-		 //保存旧的buffer
-		 NtOpenThreadCodeLen=ade32_get_code_length(g_Thread_HookObOpenObjectByPointer,5);
-		 RtlCopyMemory((PVOID)JmpNtOpenThread,(PVOID)g_Thread_HookObOpenObjectByPointer,NtOpenThreadCodeLen);
-
-		 
-		 //写入跳转 bytes=JmpNtOpenProcess-g_HookObOpenObjectByPointer-5;
-		 bytes=(ULONG)JmpNtOpenThread-g_Thread_HookObOpenObjectByPointer-5;
 		 DisableWP();
 		 Irql=KeRaiseIrqlToDpcLevel();
-
-		 *(PUCHAR)g_Thread_HookObOpenObjectByPointer=0xE9;
-		 RtlCopyMemory((PVOID)(g_Thread_HookObOpenObjectByPointer+1),&bytes,sizeof(ULONG));
-
+		 RtlCopyMemory((PVOID)JmpNtOpenThread,(PVOID)g_uNtOpenThreadInjectAddr,NtOpenThreadCodeLen);
 		 KeLowerIrql(Irql);
 		 EnableWP();
+		 WriteJmp((PVOID)g_uNtOpenThreadInjectAddr,JmpNtOpenThread,JmpBackNtOpenThread);
 
 		 KdPrint(("TP_DDK: 解除NtOpenThread保护!\n"));
 	 }
 	 else
 	 {
-		 if(*(PUCHAR)JmpNtOpenThread==0 || *(PUCHAR)JmpNtOpenThread == 0x90)
+		 if(!MmIsAddressValid(JmpNtOpenThread))
 			 return;
-		 DisableWP();
-		 Irql=KeRaiseIrqlToDpcLevel();
-		 RtlCopyMemory((PVOID)g_Thread_HookObOpenObjectByPointer,JmpNtOpenThread,NtOpenThreadCodeLen);
-		 *(PUCHAR)JmpNtOpenThread=0;
-		 KeLowerIrql(Irql);
-		 EnableWP();
+		 UnhookFunction((PVOID)g_uNtOpenThreadInjectAddr,JmpBackNtOpenThread);
 
 		 KdPrint(("TP_DDK: 还原NtOpenThread保护!\n"));
 	 }
 
-
  }
 
- BOOLEAN  g_NtOpenThread_bIsDnfProcess=FALSE; //全局变量：是否是dnf进程
+
  __declspec(naked) void __stdcall JmpNtOpenThread()
  {
 	 __asm
@@ -451,28 +438,26 @@ NotNDF:
 			 nop
 			 nop
 			 nop
-			 nop
-			 nop
-			 nop
-			 nop
 			 pushad
 			 pushfd
 			 call IsDnfProcess
-			 mov g_NtOpenThread_bIsDnfProcess,al
+			 cmp al,0
+			 je NotNDF
 			 popfd
 			 popad
-			 cmp g_NtOpenThread_bIsDnfProcess,0
-			 je NotNDF
-			 mov eax,g_Thread_HookObOpenObjectByPointer;
-		 add eax,NtOpenThreadCodeLen;
+
+			 mov eax,g_uNtOpenThreadInjectAddr
+			 add eax,NtOpenThreadCodeLen;
 		 jmp eax //DNF进程，执行TP的流程
 NotNDF:	
-		 mov eax,g_Thread_fnObOpenObjectByPointer
-			 call eax //调用原生ObOpenObjectByPointer
-			 mov edi, g_Thread_HookObOpenObjectByPointer
-			 add edi,NtOpenThreadCodeLen
-			 add edi,5
-			 jmp edi	
+		 popfd
+		popad
+		mov eax,[g_Process_fnObOpenObjectByPointer]
+		call eax //调用原生ObOpenObjectByPointer
+		 mov edi, [g_uNtOpenThreadInjectAddr]
+		 add edi,[NtOpenThreadCodeLen]
+		 add edi,5
+		 jmp edi	
 	 }
  }
 
@@ -482,7 +467,7 @@ NotNDF:
  {
 	 KIRQL Irql;
 	 PULONG pNtReadMemory;
-	 pNtReadMemory=(PULONG)((ULONG)KeServiceDescriptorTable->ServiceTableBase+186*4);
+	 pNtReadMemory=(PULONG)((ULONG)KeServiceDescriptorTable->ServiceTableBase+SSDT_INDEX_NtReadVirtualMemory*4);
 	 //addrNtWriteMemory=(ULONG)KeServiceDescriptorTable->ServiceTableBase+277*4;
 
 	 if(bFk)
@@ -540,7 +525,7 @@ void FkNtWriteVirtualMemory( BOOLEAN bFk )
 {
 	KIRQL Irql;
 	PULONG pNtWriteMemory;
-	pNtWriteMemory=(PULONG)((ULONG)KeServiceDescriptorTable->ServiceTableBase+277*4);
+	pNtWriteMemory=(PULONG)((ULONG)KeServiceDescriptorTable->ServiceTableBase+SSDT_INDEX_NtWriteVirtualMemory*4);
 	//addrNtWriteMemory=(ULONG)KeServiceDescriptorTable->ServiceTableBase+277*4;
 
 	if(bFk)

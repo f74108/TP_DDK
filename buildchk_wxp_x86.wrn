@@ -19,15 +19,15 @@
 1>d:\project\driver\tp_ddk\util.c(779) : warning C4047: '=' : 'PVOID' differs in levels of indirection from 'ULONG'
 1>d:\project\driver\tp_ddk\util.c(816) : warning C4996: 'ExAllocatePool': was declared deprecated
 1>d:\project\driver\tp_ddk\hook.c(76) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'PVOID'
-1>d:\project\driver\tp_ddk\hook.c(159) : warning C4022: 'memcpy' : pointer mismatch for actual parameter 2
-1>d:\project\driver\tp_ddk\hook.c(160) : warning C4047: '=' : 'PSYSTEM_DESCRIPTOR_TABLE' differs in levels of indirection from 'ULONG'
-1>d:\project\driver\tp_ddk\hook.c(200) : warning C4022: 'memcpy' : pointer mismatch for actual parameter 2
-1>d:\project\driver\tp_ddk\hook.c(207) : warning C4047: '=' : 'PSYSTEM_DESCRIPTOR_TABLE' differs in levels of indirection from 'ULONG'
-1>d:\project\driver\tp_ddk\hook.c(310) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'PUCHAR'
-1>d:\project\driver\tp_ddk\hook.c(312) : warning C4022: 'ade32_get_code_length' : pointer mismatch for actual parameter 1
-1>d:\project\driver\tp_ddk\hook.c(337) : warning C4026: function declared with formal parameter list
-1>d:\project\driver\tp_ddk\hook.c(411) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'PUCHAR'
-1>d:\project\driver\tp_ddk\hook.c(415) : warning C4022: 'ade32_get_code_length' : pointer mismatch for actual parameter 1
-1>d:\project\driver\tp_ddk\hook.c(451) : warning C4026: function declared with formal parameter list
-1>d:\project\driver\tp_ddk\hook.c(508) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'void (__stdcall *)()'
-1>d:\project\driver\tp_ddk\hook.c(568) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'void (__stdcall *)()'
+1>d:\project\driver\tp_ddk\hook.c(162) : warning C4022: 'memcpy' : pointer mismatch for actual parameter 2
+1>d:\project\driver\tp_ddk\hook.c(163) : warning C4047: '=' : 'PSYSTEM_DESCRIPTOR_TABLE' differs in levels of indirection from 'ULONG'
+1>d:\project\driver\tp_ddk\hook.c(203) : warning C4022: 'memcpy' : pointer mismatch for actual parameter 2
+1>d:\project\driver\tp_ddk\hook.c(210) : warning C4047: '=' : 'PSYSTEM_DESCRIPTOR_TABLE' differs in levels of indirection from 'ULONG'
+1>d:\project\driver\tp_ddk\hook.c(308) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'PUCHAR'
+1>d:\project\driver\tp_ddk\hook.c(310) : warning C4022: 'ade32_get_code_length' : pointer mismatch for actual parameter 1
+1>d:\project\driver\tp_ddk\hook.c(335) : warning C4026: function declared with formal parameter list
+1>d:\project\driver\tp_ddk\hook.c(404) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'PUCHAR'
+1>d:\project\driver\tp_ddk\hook.c(406) : warning C4022: 'ade32_get_code_length' : pointer mismatch for actual parameter 1
+1>d:\project\driver\tp_ddk\hook.c(430) : warning C4026: function declared with formal parameter list
+1>d:\project\driver\tp_ddk\hook.c(483) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'void (__stdcall *)()'
+1>d:\project\driver\tp_ddk\hook.c(541) : warning C4047: '=' : 'ULONG' differs in levels of indirection from 'void (__stdcall *)()'
